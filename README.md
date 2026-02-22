@@ -15,13 +15,17 @@ A Claude Code skill for analyzing disk space usage and providing cleanup recomme
 
 - Analyze disk space usage overview
 - Identify large files and directories
-- **Deep cache analysis** - Detailed breakdown of `~/Library/Caches` contents
+- **Universal deep analysis** - Deep analysis for ANY directory, not just caches
+- **First-time setup wizard** - Guide users to configure webhook on first use
+- **Multi-platform push notifications** - Support Feishu, WeCom, and custom webhooks
+- **File type distribution analysis** - See which file types take the most space
+- **Expired/orphaned file detection** - Find old files and broken symlinks
 - **Identify unused/orphaned cache files** from uninstalled applications
 - **Cache safety classification** - Know which caches are safe to clean
-- Check common cleanup locations (caches, logs, temp files, etc.)
 - Risk assessment for each cleanup item (🟢 Low / 🟡 Medium / 🔴 High)
 - Generate structured analysis reports
 - Provide manual cleanup commands for user execution
+- **Flexible configuration** - Change webhook settings anytime via natural language
 
 ### Installation
 
@@ -133,13 +137,17 @@ In Claude Code, use any of the following commands:
 
 - 分析磁盘空间使用概览
 - 识别大文件和大目录
-- **深度缓存分析** - 详细分解 `~/Library/Caches` 内容
+- **通用深度分析** - 任意目录都支持深度分析，不仅限于缓存
+- **首次使用向导** - 引导用户配置 webhook 推送
+- **多平台推送通知** - 支持飞书、企业微信和自定义 webhook
+- **文件类型分布分析** - 查看哪些文件类型占用最多空间
+- **过期/孤立文件检测** - 查找旧文件和断开的符号链接
 - **识别无用/孤立缓存文件** - 检测已卸载应用的残留缓存
 - **缓存安全分类** - 明确哪些缓存可以安全清理
-- 检查常见可清理位置（缓存、日志、临时文件等）
 - 为每个清理项目评估风险等级（🟢 低 / 🟡 中 / 🔴 高）
 - 生成结构化分析报告
 - 提供手动清理命令供用户执行
+- **灵活配置** - 随时通过自然语言修改 webhook 设置
 
 ### 安装方法
 
