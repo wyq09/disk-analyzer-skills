@@ -15,8 +15,11 @@ A Claude Code skill for analyzing disk space usage and providing cleanup recomme
 
 - Analyze disk space usage overview
 - Identify large files and directories
+- **Deep cache analysis** - Detailed breakdown of `~/Library/Caches` contents
+- **Identify unused/orphaned cache files** from uninstalled applications
+- **Cache safety classification** - Know which caches are safe to clean
 - Check common cleanup locations (caches, logs, temp files, etc.)
-- Risk assessment for each cleanup item (Low/Medium/High)
+- Risk assessment for each cleanup item (🟢 Low / 🟡 Medium / 🔴 High)
 - Generate structured analysis reports
 - Provide manual cleanup commands for user execution
 
@@ -130,8 +133,11 @@ In Claude Code, use any of the following commands:
 
 - 分析磁盘空间使用概览
 - 识别大文件和大目录
+- **深度缓存分析** - 详细分解 `~/Library/Caches` 内容
+- **识别无用/孤立缓存文件** - 检测已卸载应用的残留缓存
+- **缓存安全分类** - 明确哪些缓存可以安全清理
 - 检查常见可清理位置（缓存、日志、临时文件等）
-- 为每个清理项目评估风险等级（低/中/高）
+- 为每个清理项目评估风险等级（🟢 低 / 🟡 中 / 🔴 高）
 - 生成结构化分析报告
 - 提供手动清理命令供用户执行
 

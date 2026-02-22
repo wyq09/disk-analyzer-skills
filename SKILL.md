@@ -25,6 +25,8 @@ license: MIT
 - 清理磁盘建议
 - 系统垃圾文件分析
 - 目录大小统计
+- **深度缓存分析**
+- **详细分析 Library/Caches**
 
 ## 工作流程
 
@@ -33,6 +35,7 @@ license: MIT
 首先确认用户想要分析的路径：
 - 如果用户指定了路径，分析该路径
 - 如果用户未指定，询问用户想分析哪个目录（默认可分析用户主目录）
+- 如果用户要求深度分析，执行额外的缓存目录详细分析
 
 ### 2. 获取磁盘整体情况
 
@@ -128,7 +131,128 @@ du -sh ~/.npm 2>/dev/null
 du -sh ~/.cache/pip 2>/dev/null
 ```
 
-### 5. 生成分析报告
+### 5. 深度缓存分析（重点功能）
+
+当发现 `~/Library/Caches` 占用空间较大时（>5GB），或用户要求深度分析时，执行以下详细分析：
+
+#### 5.1 分析 ~/Library/Caches 子目录
+
+```bash
+# 列出 Caches 目录下所有子目录大小，按大小排序
+du -sh ~/Library/Caches/*/ 2>/dev/null | sort -hr | head -30
+
+# 查找缓存目录中的大文件
+find ~/Library/Caches -type f -size +100M 2>/dev/null -exec ls -lh {} \; | awk '{print $5, $9}' | sort -hr | head -20
+```
+
+#### 5.2 常见缓存目录安全等级分类
+
+根据缓存类型，将结果分为以下几类：
+
+**🟢 低风险 - 可安全清理（自动重建）**
+
+| 缓存目录 | 说明 | 清理命令 |
+|----------|------|----------|
+| `com.apple.Safari/Webkit` | Safari 浏览器缓存 | `rm -rf ~/Library/Caches/com.apple.Safari/WebKit` |
+| `com.google.Chrome` | Chrome 浏览器缓存 | 在 Chrome 设置中清理 |
+| `com.microsoft.edgemac` | Edge 浏览器缓存 | 在 Edge 设置中清理 |
+| `com.mozilla.firefox` | Firefox 浏览器缓存 | 在 Firefox 设置中清理 |
+| `com.apple.dt.Xcode` | Xcode 临时缓存 | `rm -rf ~/Library/Caches/com.apple.dt.Xcode` |
+| `Homebrew` | Homebrew 下载缓存 | `brew cleanup --prune=all` |
+| `pip` | Python pip 缓存 | `pip cache purge` |
+| `Yarn` | Yarn 包缓存 | `yarn cache clean` |
+| `node-gyp` | Node.js 编译缓存 | `rm -rf ~/Library/Caches/node-gyp` |
+| `electron` | Electron 缓存 | `rm -rf ~/Library/Caches/electron` |
+| `electron-builder` | Electron 构建缓存 | `rm -rf ~/Library/Caches/electron-builder` |
+| `CocoaPods` | iOS 依赖缓存 | `pod cache clean --all` |
+| `gradle` | Gradle 缓存 | `rm -rf ~/Library/Caches/gradle` |
+| `miguelgrinberg.Flask` | Flask 缓存 | 可安全删除 |
+| `com.apple.bird` | iCloud 同步缓存 | 系统自动管理 |
+
+**🟡 中等风险 - 清理前请确认**
+
+| 缓存目录 | 说明 | 注意事项 |
+|----------|------|----------|
+| `com.apple.Phojos` | 照片缓存 | 清理后可能需要重新加载照片 |
+| `com.apple.music` | Apple Music 缓存 | 清理后可能需要重新下载 |
+| `com.apple.podcasts` | 播客缓存 | 清理后需要重新下载 |
+| `com.apple.spotlight` | Spotlight 索引缓存 | 系统会自动重建 |
+| `com.apple.nsurlsessiond` | 系统 URL 会话缓存 | 系统自动管理 |
+| `com.apple.geod` | 地图缓存 | 清理后地图加载变慢 |
+| `com.apple.HelpData` | 帮助文档缓存 | 可清理，需要时重新下载 |
+| `com.adobe.*` | Adobe 系列缓存 | 清理后可能需要重新登录 |
+| `com.microsoft.*` | Microsoft 应用缓存 | 清理后可能需要重新登录 |
+| `com.jetbrains.*` | JetBrains IDE 缓存 | 清理后 IDE 需要重建索引 |
+
+**🔴 高风险 - 不建议清理**
+
+| 缓存目录 | 说明 | 原因 |
+|----------|------|------|
+| `com.apple.loginservices` | 登录服务缓存 | 可能影响系统登录 |
+| `com.apple.coreservices` | 核心服务缓存 | 系统关键组件 |
+| `com.apple.apsd` | Apple 推送服务 | 系统通知服务 |
+| `com.apple.security` | 安全相关缓存 | 系统安全组件 |
+
+#### 5.3 识别无用/过期文件
+
+执行以下检查识别可能无用的文件：
+
+```bash
+# 查找超过 30 天未访问的缓存文件
+find ~/Library/Caches -type f -atime +30 -size +10M 2>/dev/null | head -20
+
+# 查找超过 90 天未修改的缓存文件
+find ~/Library/Caches -type f -mtime +90 -size +10M 2>/dev/null | head -20
+
+# 查找已卸载应用的残留缓存（检查是否有对应应用）
+ls ~/Library/Caches/ | while read dir; do
+  app_name=$(echo "$dir" | sed 's/com\.//;s/\./ /g')
+  # 检查应用是否还存在
+  if ! mdfind "kMDItemKind == 'Application'" 2>/dev/null | grep -qi "$app_name"; then
+    echo "可能已卸载应用的缓存: $dir"
+  fi
+done
+```
+
+#### 5.4 深度分析其他缓存位置
+
+**分析 ~/Library/Developer:**
+```bash
+# Xcode 相关缓存分析
+du -sh ~/Library/Developer/*/ 2>/dev/null | sort -hr
+
+# 模拟器缓存（通常很大）
+du -sh ~/Library/Developer/CoreSimulator 2>/dev/null
+
+# Xcode 档案
+du -sh ~/Library/Developer/Xcode/Archives 2>/dev/null
+
+# 设备支持文件
+du -sh ~/Library/Developer/Xcode/iOS\ DeviceSupport 2>/dev/null
+```
+
+**分析 ~/.npm 和 ~/.cache:**
+```bash
+# npm 缓存详情
+du -sh ~/.npm/_cacache 2>/dev/null
+
+# 各类开发工具缓存
+du -sh ~/.cache/*/ 2>/dev/null | sort -hr
+```
+
+**分析 Docker:**
+```bash
+# Docker 空间使用情况
+docker system df
+
+# Docker 镜像列表
+docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+# 未使用的 Docker 资源
+docker system df -v
+```
+
+### 6. 生成分析报告
 
 根据收集的信息，生成结构化的分析报告：
 
@@ -144,6 +268,11 @@ du -sh ~/.cache/pip 2>/dev/null
 | 路径 | 大小 | 说明 |
 |------|------|------|
 | ... | ... | ... |
+
+## 深度缓存分析
+| 缓存目录 | 大小 | 风险等级 | 建议 |
+|------|------|----------|------|
+| ... | ... | ... | ... |
 
 ## 可清理项目建议
 | 路径 | 大小 | 风险等级 | 清理建议 |
@@ -176,6 +305,7 @@ du -sh ~/.cache/pip 2>/dev/null
 | 类型 | 路径 | 说明 |
 |------|------|------|
 | Xcode 派生数据 | ~/Library/Developer/Xcode/DerivedData | Xcode 编译缓存 |
+| iOS 模拟器 | ~/Library/Developer/CoreSimulator | iOS 模拟器数据 |
 | Docker 镜像 | Docker 系统存储 | 未使用的 Docker 镜像 |
 | Homebrew 缓存 | ~/Library/Caches/Homebrew | 软件包下载缓存 |
 | 应用程序缓存 | ~/Library/Caches | 各应用程序缓存 |
@@ -213,11 +343,39 @@ brew cleanup --prune=all
 # 清理 Xcode 派生数据（中等风险，下次编译会重新生成）
 rm -rf ~/Library/Developer/Xcode/DerivedData/*
 
+# 清理 iOS 模拟器（中等风险）
+xcrun simctl delete unavailable
+
 # 查看 Docker 空间使用情况
 docker system df
 
 # 清理 Docker 未使用资源（中等风险）
 docker system prune
+```
+
+### 深度缓存清理命令
+
+```bash
+# 清理特定应用缓存（低风险）
+rm -rf ~/Library/Caches/com.apple.dt.Xcode
+rm -rf ~/Library/Caches/node-gyp
+rm -rf ~/Library/Caches/electron
+rm -rf ~/Library/Caches/electron-builder
+rm -rf ~/Library/Caches/CocoaPods
+
+# 清理 Gradle 缓存（低风险）
+rm -rf ~/Library/Caches/gradle
+rm -rf ~/.gradle/caches
+
+# 清理 Go 模块缓存（低风险）
+go clean -modcache
+
+# 清理 Cargo 缓存（低风险，Rust）
+rm -rf ~/.cargo/registry/cache
+rm -rf ~/.cargo/registry/index
+
+# 查找并清理大型缓存目录
+du -sh ~/Library/Caches/*/ 2>/dev/null | sort -hr | head -10
 ```
 
 ### Linux 清理命令
@@ -256,6 +414,26 @@ npm cache clean --force
    3. ~/Downloads (15 GB) - 下载文件
    ...
 
+🔍 深度缓存分析 (~/Library/Caches):
+
+   🟢 低风险 (可安全清理):
+   ┌─────────────────────────────────┬────────┬─────────────────────┐
+   │ 缓存目录                        │ 大小   │ 说明                │
+   ├─────────────────────────────────┼────────┼─────────────────────┤
+   │ com.google.Chrome               │ 3.2 GB │ Chrome 浏览器缓存   │
+   │ Homebrew                        │ 1.5 GB │ Homebrew 下载缓存   │
+   │ node-gyp                        │ 800 MB │ Node 编译缓存       │
+   │ electron                        │ 500 MB │ Electron 缓存       │
+   └─────────────────────────────────┴────────┴─────────────────────┘
+
+   🟡 中等风险 (请先确认):
+   ┌─────────────────────────────────┬────────┬─────────────────────┐
+   │ 缓存目录                        │ 大小   │ 说明                │
+   ├─────────────────────────────────┼────────┼─────────────────────┤
+   │ com.apple.Phojos                │ 2.1 GB │ 照片缓存            │
+   │ com.jetbrains.intellij          │ 1.8 GB │ IntelliJ 缓存       │
+   └─────────────────────────────────┴────────┴─────────────────────┘
+
 🗑️ 可清理项目建议:
 
    低风险 (建议清理):
@@ -267,14 +445,6 @@ npm cache clean --force
    │ ~/Downloads                     │ 15 GB  │ 下载文件（请确认）  │
    └─────────────────────────────────┴────────┴─────────────────────┘
 
-   中等风险 (请先确认):
-   ┌─────────────────────────────────┬────────┬─────────────────────┐
-   │ 路径                            │ 大小   │ 说明                │
-   ├─────────────────────────────────┼────────┼─────────────────────┤
-   │ ~/Library/Caches               │ 8 GB   │ 应用缓存            │
-   │ ~/Library/Developer/Xcode      │ 10 GB  │ Xcode 数据          │
-   └─────────────────────────────────┴────────┴─────────────────────┘
-
 📝 建议的清理命令 (请手动复制执行):
 
    # 清空废纸篓 (可释放约 5 GB)
@@ -282,6 +452,9 @@ npm cache clean --force
 
    # 清理 npm 缓存 (可释放约 2 GB)
    npm cache clean --force
+
+   # 清理 Chrome 缓存 (可释放约 3.2 GB)
+   rm -rf ~/Library/Caches/com.google.Chrome
 
 ⚠️ 注意事项:
    - 以上命令仅供参考，请在执行前确认路径正确
@@ -298,21 +471,34 @@ npm cache clean --force
 3. **路径验证**：在给出建议前，先验证路径是否存在
 4. **空间预估**：尽量提供可释放空间的预估值
 5. **备份提醒**：提醒用户在清理前备份重要数据
+6. **深度分析**：当缓存目录较大时，自动展开详细分析
 
 ## 特殊目录说明
 
-### macOS 特有目录
+### macOS ~/Library/Caches 常见目录
 
-- `~/Library`：包含应用程序支持文件、缓存、偏好设置等
-- `~/Library/Caches`：可安全清理，应用会自动重建
-- `~/Library/Application Support`：包含应用数据，清理需谨慎
-- `~/Library/Developer`：开发工具相关，Xcode 派生数据可清理
-- `~/Library/Containers`：沙盒应用数据
+| 目录名 | 应用/服务 | 安全等级 | 说明 |
+|--------|-----------|----------|------|
+| com.apple.Safari | Safari | 🟢 低 | 浏览器缓存，可清理 |
+| com.google.Chrome | Chrome | 🟢 低 | 浏览器缓存，可清理 |
+| com.microsoft.edgemac | Edge | 🟢 低 | 浏览器缓存，可清理 |
+| com.apple.dt.Xcode | Xcode | 🟢 低 | 开发工具缓存 |
+| Homebrew | Homebrew | 🟢 低 | 包管理器缓存 |
+| com.apple.Phojos | 照片 | 🟡 中 | 照片缩略图缓存 |
+| com.apple.music | Music | 🟡 中 | 音乐流媒体缓存 |
+| com.jetbrains.* | JetBrains | 🟡 中 | IDE 缓存，清理后需重建索引 |
+| com.adobe.* | Adobe | 🟡 中 | Adobe 应用缓存 |
+| com.apple.coreservices | 系统 | 🔴 高 | 核心服务，不建议清理 |
 
 ### 开发相关目录
 
-- `node_modules`：Node.js 项目依赖，可通过 npm install 重建
-- `.venv` / `venv`：Python 虚拟环境，可重建
-- `__pycache__`：Python 缓存，可安全删除
-- `target`（Maven）/ `build`（Gradle）：Java 构建输出，可重建
-- `.gradle`：Gradle 缓存，可清理部分
+| 目录 | 说明 | 重建方法 |
+|------|------|----------|
+| node_modules | Node.js 项目依赖 | `npm install` |
+| .venv / venv | Python 虚拟环境 | `python -m venv .venv` |
+| __pycache__ | Python 字节码缓存 | 自动生成 |
+| target (Maven) | Java 构建输出 | `mvn compile` |
+| build (Gradle) | Java 构建输出 | `./gradlew build` |
+| .gradle | Gradle 缓存 | 自动下载 |
+| ~/go/pkg | Go 模块缓存 | `go mod download` |
+| ~/.cargo | Cargo 缓存 | `cargo build` |
